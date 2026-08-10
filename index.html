@@ -131,6 +131,14 @@
   .vd-prize{display:inline-flex;align-items:center;gap:5px;background:linear-gradient(135deg,var(--gold),var(--gold-deep));color:#fff;border-radius:7px;font-size:10px;font-weight:800;letter-spacing:.03em;padding:3px 9px;white-space:nowrap;box-shadow:0 2px 6px rgba(196,130,20,.35)}
   .vd-prize-cell{max-width:300px}
 
+  .npg-sec .sec-head{flex-wrap:wrap}
+  .npg-sec .sec-head .count{margin-left:auto}
+  .npg-sec .sec-head .dt-export{margin-left:12px}
+  .npg-cell{text-align:center}
+  .npg-x{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#FDE2E1;color:#D64545;font-weight:900;font-size:12px;line-height:1}
+  .npg-ok{color:#C6D3DF}
+  .npg-names{white-space:normal;min-width:240px;color:var(--ink-dim)}
+
   /* Section surfaces */
   .card.sec.nvbh-award.a-blue{background:linear-gradient(180deg,#FFFFFF,#F6FBFF)}
   .card.sec.nvbh-award.a-teal{background:linear-gradient(180deg,#FFFFFF,#F2FBFA)}
@@ -723,6 +731,30 @@
         </table>
       </div>
       <div class="dt-empty hide" id="vdEmpty">Không có ai được vinh danh trong phạm vi hiện tại.</div>
+    </section>
+
+    <section class="card sec npg-sec">
+      <div class="sec-head">
+        <div class="award-titles">
+          <div class="award-eyebrow ey-chart">THEO DÕI NPP</div>
+          <h2>NPP CHƯA CÓ NVBH ĐẠT THƯỞNG</h2>
+        </div>
+        <span class="count" id="npgCount"></span>
+        <button class="dt-export" id="btnNppGapExport" type="button">⬇ XUẤT EXCEL</button>
+      </div>
+      <div class="dt-scroll">
+        <table class="dt-table npg-table">
+          <thead>
+            <tr>
+              <th>STT</th><th>Mã NPP</th><th>Tên NPP</th>
+              <th>Không đạt thưởng (DS+ASO)</th><th>Không đạt Doanh Số</th><th>Không đạt ASO</th>
+              <th>Danh sách NVBH</th>
+            </tr>
+          </thead>
+          <tbody id="npgBody"></tbody>
+        </table>
+      </div>
+      <div class="dt-empty hide" id="npgEmpty">Không có NPP nào trong diện theo dõi với bộ lọc hiện tại.</div>
     </section>
 
   <section class="card sec sec-charts" id="chartsSection">
@@ -1750,6 +1782,83 @@ var IS_ADMIN = false;
     XLSX.writeFile(wb, "DDAY-10.08_DanhSachVinhDanh.xlsx");
   }
 
+  function nppGapList(){
+    var hasDs = {}, hasAso = {};
+    filtered("NVBH_DS").forEach(function(r){ if (r.maNPP) hasDs[r.maNPP] = 1; });
+    filtered("NVBH_ASO").forEach(function(r){ if (r.maNPP) hasAso[r.maNPP] = 1; });
+    var byNpp = {};
+    (DATA.detail.NVBH || []).forEach(function(r){
+      if (!matches(r) || !r.maNPP) return;
+      if (!byNpp[r.maNPP]) byNpp[r.maNPP] = { ma: r.maNPP, ten: r.tenNPP || "", nvbh: [] };
+      if (r.ten) byNpp[r.maNPP].nvbh.push(r.ten);
+    });
+    var list = [];
+    Object.keys(byNpp).forEach(function(ma){
+      var it = byNpp[ma];
+      it.hasDs = !!hasDs[ma];
+      it.hasAso = !!hasAso[ma];
+      it.noThuong = !it.hasDs && !it.hasAso;
+      it.noDs = !it.hasDs;
+      it.noAso = !it.hasAso;
+      if (it.noThuong || it.noDs || it.noAso) list.push(it);
+    });
+    list.sort(function(a, b){
+      if (a.noThuong !== b.noThuong) return a.noThuong ? -1 : 1;
+      if (a.noDs !== b.noDs) return a.noDs ? -1 : 1;
+      if (a.noAso !== b.noAso) return a.noAso ? -1 : 1;
+      var c = (a.ten || "").localeCompare(b.ten || "", "vi");
+      return c !== 0 ? c : a.ma.localeCompare(b.ma);
+    });
+    return list;
+  }
+
+  function renderNppGap(){
+    var list = nppGapList();
+    var body = $("npgBody"), empty = $("npgEmpty"), count = $("npgCount");
+    var nThuong = 0, nDs = 0, nAso = 0;
+    list.forEach(function(it){
+      if (it.noThuong) nThuong++;
+      if (it.noDs) nDs++;
+      if (it.noAso) nAso++;
+    });
+    if (count) count.textContent = list.length + " NPP · " + nThuong + " không đạt thưởng · " + nDs + " không DS · " + nAso + " không ASO";
+    if (!list.length) {
+      if (body) body.innerHTML = "";
+      if (empty) empty.classList.remove("hide");
+      return;
+    }
+    if (empty) empty.classList.add("hide");
+    var html = "";
+    function flag(ok){
+      return ok ? '<span class="npg-x">✕</span>' : '<span class="npg-ok">—</span>';
+    }
+    list.forEach(function(it, i){
+      html += "<tr>" +
+        '<td class="rank">' + (i + 1) + "</td>" +
+        "<td>" + escapeHtml(it.ma) + "</td>" +
+        '<td class="mien-cell">' + escapeHtml(it.ten) + "</td>" +
+        '<td class="npg-cell">' + flag(it.noThuong) + "</td>" +
+        '<td class="npg-cell">' + flag(it.noDs) + "</td>" +
+        '<td class="npg-cell">' + flag(it.noAso) + "</td>" +
+        '<td class="npg-names">' + escapeHtml(it.nvbh.join("; ")) + "</td></tr>";
+    });
+    body.innerHTML = html;
+  }
+
+  function exportNppGap(){
+    if (!window.XLSX) { alert("Chưa tải được thư viện xuất Excel. Hãy mở lại file và thử lại."); return; }
+    var list = nppGapList();
+    var header = ["STT", "Mã NPP", "Tên NPP", "Không đạt thưởng (DS+ASO)", "Không đạt Doanh Số", "Không đạt ASO", "Danh sách NVBH"];
+    var rows = list.map(function(it, i){
+      return [i + 1, it.ma, it.ten, it.noThuong ? "X" : "", it.noDs ? "X" : "", it.noAso ? "X" : "", it.nvbh.join("; ")];
+    });
+    var ws = XLSX.utils.aoa_to_sheet([header].concat(rows));
+    ws["!cols"] = header.map(function(h){ return { wch: Math.max(12, String(h).length + 4) }; });
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "NPPChuaCoNVBHDatThuong");
+    XLSX.writeFile(wb, "DDAY-10.08_NPPChuaCoNVBHDatThuong.xlsx");
+  }
+
   function switchPage(page){
     var d = $("page-dashboard");
     var c = $("page-chitiet");
@@ -1814,6 +1923,7 @@ var IS_ADMIN = false;
     renderDetail();
     renderRewardCards();
     renderVinhDanh();
+    renderNppGap();
     renderFooter();
   }
 
@@ -1837,6 +1947,8 @@ var IS_ADMIN = false;
     });
     var vdExp = $("btnVinhDanhExport");
     if (vdExp) vdExp.addEventListener("click", exportVinhDanh);
+    var npgExp = $("btnNppGapExport");
+    if (npgExp) npgExp.addEventListener("click", exportNppGap);
     var logout = $("btnLogout");
     if (logout) logout.addEventListener("click", doLogout);
   }
