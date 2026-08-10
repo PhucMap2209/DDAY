@@ -137,7 +137,6 @@
   .npg-cell{text-align:center}
   .npg-x{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#FDE2E1;color:#D64545;font-weight:900;font-size:12px;line-height:1}
   .npg-ok{color:#C6D3DF}
-  .npg-names{white-space:normal;min-width:240px;color:var(--ink-dim)}
 
   /* Section surfaces */
   .card.sec.nvbh-award.a-blue{background:linear-gradient(180deg,#FFFFFF,#F6FBFF)}
@@ -746,9 +745,8 @@
         <table class="dt-table npg-table">
           <thead>
             <tr>
-              <th>STT</th><th>Mã NPP</th><th>Tên NPP</th>
-              <th>Không đạt thưởng (DS+ASO)</th><th>Không đạt Doanh Số</th><th>Không đạt ASO</th>
-              <th>Danh sách NVBH</th>
+              <th>STT</th><th>Miền</th><th>Khu Vực</th><th>Mã NPP</th><th>Tên NPP</th>
+              <th>Không đạt Doanh Số</th><th>Không đạt ASO</th>
             </tr>
           </thead>
           <tbody id="npgBody"></tbody>
@@ -1789,8 +1787,9 @@ var IS_ADMIN = false;
     var byNpp = {};
     (DATA.detail.NVBH || []).forEach(function(r){
       if (!matches(r) || !r.maNPP) return;
-      if (!byNpp[r.maNPP]) byNpp[r.maNPP] = { ma: r.maNPP, ten: r.tenNPP || "", nvbh: [] };
-      if (r.ten) byNpp[r.maNPP].nvbh.push(r.ten);
+      if (!byNpp[r.maNPP]) byNpp[r.maNPP] = { ma: r.maNPP, ten: r.tenNPP || "", miens: {}, kvs: {} };
+      if (r.mien) byNpp[r.maNPP].miens[r.mien] = 1;
+      if (r.kv) byNpp[r.maNPP].kvs[r.kv] = 1;
     });
     var list = [];
     Object.keys(byNpp).forEach(function(ma){
@@ -1800,12 +1799,17 @@ var IS_ADMIN = false;
       it.noThuong = !it.hasDs && !it.hasAso;
       it.noDs = !it.hasDs;
       it.noAso = !it.hasAso;
+      it.miens = Object.keys(it.miens);
+      it.kvs = Object.keys(it.kvs);
       if (it.noThuong || it.noDs || it.noAso) list.push(it);
     });
+    var idx = mienOrderIndex();
     list.sort(function(a, b){
-      if (a.noThuong !== b.noThuong) return a.noThuong ? -1 : 1;
-      if (a.noDs !== b.noDs) return a.noDs ? -1 : 1;
-      if (a.noAso !== b.noAso) return a.noAso ? -1 : 1;
+      var ia = idx[a.miens[0]] !== undefined ? idx[a.miens[0]] : 99;
+      var ib = idx[b.miens[0]] !== undefined ? idx[b.miens[0]] : 99;
+      if (ia !== ib) return ia - ib;
+      var kc = natCmp(a.kvs[0] || "", b.kvs[0] || "");
+      if (kc) return kc;
       var c = (a.ten || "").localeCompare(b.ten || "", "vi");
       return c !== 0 ? c : a.ma.localeCompare(b.ma);
     });
@@ -1835,12 +1839,12 @@ var IS_ADMIN = false;
     list.forEach(function(it, i){
       html += "<tr>" +
         '<td class="rank">' + (i + 1) + "</td>" +
+        '<td class="mien-cell">' + escapeHtml(it.miens.join(", ")) + "</td>" +
+        "<td>" + escapeHtml(it.kvs.join(", ")) + "</td>" +
         "<td>" + escapeHtml(it.ma) + "</td>" +
         '<td class="mien-cell">' + escapeHtml(it.ten) + "</td>" +
-        '<td class="npg-cell">' + flag(it.noThuong) + "</td>" +
         '<td class="npg-cell">' + flag(it.noDs) + "</td>" +
-        '<td class="npg-cell">' + flag(it.noAso) + "</td>" +
-        '<td class="npg-names">' + escapeHtml(it.nvbh.join("; ")) + "</td></tr>";
+        '<td class="npg-cell">' + flag(it.noAso) + "</td></tr>";
     });
     body.innerHTML = html;
   }
@@ -1848,9 +1852,9 @@ var IS_ADMIN = false;
   function exportNppGap(){
     if (!window.XLSX) { alert("Chưa tải được thư viện xuất Excel. Hãy mở lại file và thử lại."); return; }
     var list = nppGapList();
-    var header = ["STT", "Mã NPP", "Tên NPP", "Không đạt thưởng (DS+ASO)", "Không đạt Doanh Số", "Không đạt ASO", "Danh sách NVBH"];
+    var header = ["STT", "Miền", "Khu Vực", "Mã NPP", "Tên NPP", "Không đạt Doanh Số", "Không đạt ASO"];
     var rows = list.map(function(it, i){
-      return [i + 1, it.ma, it.ten, it.noThuong ? "X" : "", it.noDs ? "X" : "", it.noAso ? "X" : "", it.nvbh.join("; ")];
+      return [i + 1, it.miens.join(", "), it.kvs.join(", "), it.ma, it.ten, it.noDs ? "X" : "", it.noAso ? "X" : ""];
     });
     var ws = XLSX.utils.aoa_to_sheet([header].concat(rows));
     ws["!cols"] = header.map(function(h){ return { wch: Math.max(12, String(h).length + 4) }; });
